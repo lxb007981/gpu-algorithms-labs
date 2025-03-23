@@ -35,7 +35,7 @@ To simplify the kernel code, you do not need to support input data with z-extent
 The data is stored in column-major order. For example, you might consider using a macro to simplify your data access indexing:
 
 ```c++
-__global__ void kernel(...) {}
+__global__ void kernel(...) {
     #define A0(i, j, k) A0[((k)*ny + (j))*nx + (i)]
     // your kernel code
     #undef A0

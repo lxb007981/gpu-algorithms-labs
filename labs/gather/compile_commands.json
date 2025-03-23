@@ -1,0 +1,7 @@
+[
+{
+  "directory": "/home/lxb007981/code_wsl/2023_Spring/cs508/gpu-algorithms-labs/labs/gather",
+  "command": "/usr/local/cuda/bin/nvcc -forward-unknown-to-host-compiler  -I/home/lxb007981/code_wsl/2023_Spring/cs508/gpu-algorithms-labs/labs/gather/gather -I/home/lxb007981/code_wsl/2023_Spring/cs508/gpu-algorithms-labs/labs/gather/src -I/usr/local/cuda/include -std=c++11 -x cu -c /home/lxb007981/code_wsl/2023_Spring/cs508/gpu-algorithms-labs/labs/gather/main.cu -o CMakeFiles/gather.dir/main.cu.o",
+  "file": "/home/lxb007981/code_wsl/2023_Spring/cs508/gpu-algorithms-labs/labs/gather/main.cu"
+}
+]

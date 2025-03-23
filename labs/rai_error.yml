@@ -1,0 +1,16 @@
+ERRO[0001] Unable to assume role: SignatureDoesNotMatch: Signature expired: 20230206T150752Z is now earlier than 20230207T041705Z (20230207T043205Z - 15 min.)
+        status code: 403, request id: b058d0d5-7e88-420f-9b85-a3d4073bd3b0  pkg=amazon
+ERRO[0001] Failed to set sts credentials                 pkg=amazon error="SignatureDoesNotMatch: Signature expired: 20230206T150752Z is now earlier than 20230207T041705Z (20230207T043205Z - 15 min.)\n\tstatus code: 403, request id: b058d0d5-7e88-420f-9b85-a3d4073bd3b0"
+ERRO[0001] Cannot list buckets                           pkg=store/s3 error="RequestTimeTooSkewed: The difference between the request time and the current time is too large.\n\tstatus code: 403, request id: STYEBFYKTJ59P1XP, host id: uvdB6jx7UpR7hfIs39nKXm0WgD02lE4I59u2YvIaewdApDF0UqBaMQKjvR/eoID9O4zBSrR1Y3UwSpDELRrTKQ=="
+ERRO[0001] Can't add file /home/lxb007981/code_wsl/2023_Spring/cs508/gpu-algorithms-labs/labs/stencil/.vscode to tar: io: read/write on closed pipe 
+ERRO[0001] Can't close tar writer: io: read/write on closed pipe 
+Dynamic Rate Limit: 30s
+✱ Checking your authentication credentials.
+ERRO[0006] Unable to assume role: SignatureDoesNotMatch: Signature expired: 20230206T150758Z is now earlier than 20230207T041710Z (20230207T043210Z - 15 min.)
+        status code: 403, request id: a2e1fc89-6cc7-43b7-878c-78b42ce5a4c5  pkg=amazon
+ERRO[0006] Failed to set sts credentials                 error="SignatureDoesNotMatch: Signature expired: 20230206T150758Z is now earlier than 20230207T041710Z (20230207T043210Z - 15 min.)\n\tstatus code: 403, request id: a2e1fc89-6cc7-43b7-878c-78b42ce5a4c5" pkg=amazon
+✱ Preparing your project directory for upload.
+✱ Uploading your project directory. This may take a few minutes.
+ERRO[0006] Cannot list buckets                           pkg=store/s3 error="RequestTimeTooSkewed: The difference between the request time and the current time is too large.\n\tstatus code: 403, request id: 0F80M0T0MVYNW6DQ, host id: bJvcIlwuL2C6w5G1HIZ6FKsMX9gxdbDnv8c8HXwWv98sBxtxi2THMmwoiVhLEHebIUu9MkF+ipwekN1h8W8C2A=="
+cannot list buckets: RequestTimeTooSkewed: The difference between the request time and the current time is too large.
+        status code: 403, request id: 0F80M0T0MVYNW6DQ, host id: bJvcIlwuL2C6w5G1HIZ6FKsMX9gxdbDnv8c8HXwWv98sBxtxi2THMmwoiVhLEHebIUu9MkF+ipwekN1h8W8C2A==

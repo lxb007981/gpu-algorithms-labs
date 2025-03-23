@@ -7,25 +7,61 @@
 
 __global__ void kernel(int *A0, int *Anext, int nx, int ny, int nz) {
 
-  // INSERT KERNEL CODE HERE
+// INSERT KERNEL CODE HERE
+#define A0(i, j, k) A0[((k) * ny + (j)) * nx + (i)]
+#define Anext(i, j, k) Anext[((k) * ny + (j)) * nx + (i)]
+  int i = blockIdx.x * TILE_SIZE + threadIdx.x;
+  int j = blockIdx.y * TILE_SIZE + threadIdx.y;
+  int inPrev;
+  int inNext;
+  int inCurr;
   
+  __shared__ int inCurr_s[TILE_SIZE][TILE_SIZE];
+  // target is from 1 to n-2
+  if (i >= 0 && i < nx && j >= 0 && j < ny) {
+    inPrev                             = A0(i, j, 0);
+    inCurr                             = A0(i, j, 1);
+    inCurr_s[threadIdx.y][threadIdx.x] = inCurr;
 
+  }
+  for (int k = 1; k < nz - 1; ++k) {
+    if (j >= 0 && j < ny && i >= 0 && i < nx) {
+      inNext = A0(i, j, k + 1);
+    }
+    __syncthreads();
+    if (j >= 1 && j < ny - 1 && i >= 1 && i < nx - 1) {
+      Anext(i, j, k) = -6 * inCurr + inPrev + inNext +
+
+                       (threadIdx.y >= 1 ? inCurr_s[threadIdx.y - 1][threadIdx.x] : A0(i, j - 1, k)) +
+                       ((threadIdx.y + 1) < TILE_SIZE ? inCurr_s[threadIdx.y + 1][threadIdx.x] : A0(i, j + 1, k)) +
+                       (threadIdx.x >= 1 ? inCurr_s[threadIdx.y][threadIdx.x - 1] : A0(i - 1, j, k)) +
+                       ((threadIdx.x + 1) < TILE_SIZE ? inCurr_s[threadIdx.y][threadIdx.x + 1] : A0(i + 1, j, k));
+
+    }
+    __syncthreads();
+    inPrev                             = inCurr;
+    inCurr                             = inNext;
+    inCurr_s[threadIdx.y][threadIdx.x] = inNext;
+  }
+  
+#undef A0
+#undef Anext
 }
 
-void launchStencil(int* A0, int* Anext, int nx, int ny, int nz) {
+
+void launchStencil(int *A0, int *Anext, int nx, int ny, int nz) {
 
   // INSERT CODE HERE
-
+  dim3 dimBlock(TILE_SIZE, TILE_SIZE, 1);
+  dim3 dimGrid((nx + TILE_SIZE - 1) / TILE_SIZE, (ny + TILE_SIZE - 1) / TILE_SIZE, 1);
+  kernel<<<dimGrid, dimBlock>>>(A0, Anext, nx, ny, nz);
 }
-
 
 static int eval(const int nx, const int ny, const int nz) {
 
   // Generate model
-  const auto conf_info = std::string("stencil[") + std::to_string(nx) + "," + 
-                                                   std::to_string(ny) + "," + 
-                                                   std::to_string(nz) + "]";
-  INFO("Running "  << conf_info);
+  const auto conf_info = std::string("stencil[") + std::to_string(nx) + "," + std::to_string(ny) + "," + std::to_string(nz) + "]";
+  INFO("Running " << conf_info);
 
   // generate input data
   timer_start("Generating test data");
@@ -35,8 +71,8 @@ static int eval(const int nx, const int ny, const int nz) {
 
   timer_start("Allocating GPU memory.");
   int *deviceA0 = nullptr, *deviceAnext = nullptr;
-  CUDA_RUNTIME(cudaMalloc((void **)&deviceA0, nx * ny * nz * sizeof(int)));
-  CUDA_RUNTIME(cudaMalloc((void **)&deviceAnext, nx * ny * nz * sizeof(int)));
+  CUDA_RUNTIME(cudaMalloc((void **) &deviceA0, nx * ny * nz * sizeof(int)));
+  CUDA_RUNTIME(cudaMalloc((void **) &deviceAnext, nx * ny * nz * sizeof(int)));
   timer_stop();
 
   timer_start("Copying inputs to the GPU.");
@@ -68,30 +104,27 @@ static int eval(const int nx, const int ny, const int nz) {
   return 0;
 }
 
-
-
 TEST_CASE("Stencil", "[stencil]") {
 
   SECTION("[dims:32,32,32]") {
-    eval(32,32,32);
+    eval(32, 32, 32);
   }
   SECTION("[dims:30,30,30]") {
-    eval(30,30,30);
+    eval(30, 30, 30);
   }
   SECTION("[dims:29,29,29]") {
-    eval(29,29,29);
+    eval(29, 29, 29);
   }
   SECTION("[dims:31,31,31]") {
-    eval(31,31,31);
+    eval(31, 31, 31);
   }
   SECTION("[dims:29,29,2]") {
-    eval(29,29,29);
+    eval(29, 29, 29);
   }
   SECTION("[dims:1,1,2]") {
-    eval(1,1,2);
+    eval(1, 1, 2);
   }
   SECTION("[dims:512,512,64]") {
-    eval(512,512,64);
+    eval(512, 512, 64);
   }
-
 }

@@ -1,0 +1,31 @@
+  __shared__ float ds_M[TILE_SIZE][TILE_SIZE];
+  __shared__ float ds_N[TILE_SIZE][TILE_SIZE];
+
+  int bx       = blockIdx.x;
+  int by       = blockIdx.y;
+  int tx       = threadIdx.x;
+  int ty       = threadIdx.y;
+  int Row      = by * blockDim.y + ty;
+  int Col      = bx * blockDim.x + tx;
+  float Cvalue = 0.0;
+
+  // Loop over the M and N tiles required to compute the P element
+  for (int p = 0; p < (k - 1) / TILE_SIZE + 1; ++p) {
+    // Collaborative loading of M and N tiles into shared memory
+
+    if (Row < m && p * TILE_SIZE + tx < k)
+      ds_M[ty][tx] = A(Row, p * TILE_SIZE + tx);
+    else
+      ds_M[ty][tx] = 0.0;
+    if (p * TILE_SIZE + ty < k && Col < n)
+      ds_N[ty][tx] = B((p * TILE_SIZE + ty), Col);
+    else
+      ds_N[ty][tx] = 0.0;
+    __syncthreads();
+
+    for (int i = 0; i < TILE_SIZE; ++i)
+      Cvalue += ds_M[ty][i] * ds_N[i][tx];
+    __syncthreads();
+  }
+  if (Row < m && Col < n)
+    C(Row, Col) = Cvalue;

@@ -16,4 +16,5 @@ commands:
     - make
     - ./tc -c LINEAR
     - ./tc -c OTHER
+    - ./tc -c MIXED
 

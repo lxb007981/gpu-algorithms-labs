@@ -1,6 +1,5 @@
 #include "helper.hpp"
 
-
 /******************************************************************************
  GPU main computation kernels
 *******************************************************************************/
@@ -9,30 +8,30 @@
 // parallelization scheme
 //
 // For this lab, you are not writing (nor should you modify) the kernel
-// launch code.  All three kernels are parallelized over outputs, with 
-// one thread per grid point, so use CUDA variables to obtain each 
+// launch code.  All three kernels are parallelized over outputs, with
+// one thread per grid point, so use CUDA variables to obtain each
 // thread's index.
-// 
+//
 // Feel free to restructure things after you have passed all tests.
 // Keep in mind, however, that coarsening in 1D will cost in terms of
 // coalescing (which may matter less with newer GPUs with caches), but
 // separating a thread's grid points reduces overlap in terms of which
-// bins are needed for its grid points.  You may enjoy exploring the 
+// bins are needed for its grid points.  You may enjoy exploring the
 // performance space a bit.
 //
 
 //
 // definition of inputs for kernels
-// 
+//
 // grid_size -- number of grid points; coordinates are 0 to grid_size - 1
 // num_in    -- number of input elements
 // in_val    -- length num_in array of values of input elements
 // in_pos    -- length num_in array of values of input elements
 // out       -- length grid_size array of output values
 // cutoff2   -- square of cutoff distance for later kernels
-// in_val_sorted -- same as in_val, but with input elements sorted in 
+// in_val_sorted -- same as in_val, but with input elements sorted in
 //                  increasing order of position
-// in_pos_sorted -- same as in_val, but with input elements sorted in 
+// in_pos_sorted -- same as in_val, but with input elements sorted in
 //                  increasing order of position
 // bin_pts       -- length (NUM_BINS + 1) array of indices into in_val_sorted
 //                  and in_pos_sorted; element N defines the starting index
@@ -40,72 +39,111 @@
 //                  for bin N
 //
 // constants that you will need for the binned kernel
-// NUM_BINS  -- number of bins; these split the range [0,grid_size) 
+// NUM_BINS  -- number of bins; these split the range [0,grid_size)
 //              into NUM_BINS equally-sized bins; all input elements fall
 //              into the specified range, and thus map into some bin
 //
 
-__global__ void gpu_normal_kernel(float *in_val, float *in_pos, float *out,
-                                  int grid_size, int num_in) {
+__global__ void gpu_normal_kernel(float *in_val, float *in_pos, float *out, int grid_size, int num_in) {
   //@@ INSERT CODE HERE
+  int outIdx = threadIdx.x + blockIdx.x * blockDim.x;
+  if (outIdx < grid_size) {
+    float sum = 0;
+    for (int inIdx = 0; inIdx < num_in; ++inIdx) {
+      float dist = in_pos[inIdx] - (float) outIdx;
+      sum += in_val[inIdx] * in_val[inIdx] / (dist * dist);
+    }
+    out[outIdx] = sum;
+  }
 }
 
-__global__ void gpu_cutoff_kernel(float *in_val, float *in_pos, float *out,
-                                  int grid_size, int num_in,
-                                  float cutoff2) {
+__global__ void gpu_cutoff_kernel(float *in_val, float *in_pos, float *out, int grid_size, int num_in, float cutoff2) {
   //@@ INSERT CODE HERE
+  int outIdx = threadIdx.x + blockIdx.x * blockDim.x;
+  if (outIdx < grid_size) {
+    float sum = 0;
+    for (int inIdx = 0; inIdx < num_in; ++inIdx) {
+      float dist  = in_pos[inIdx] - (float) outIdx;
+      float dist2 = dist * dist;
+      if (dist2 < cutoff2) {
+        sum += in_val[inIdx] * in_val[inIdx] / dist2;
+      }
+    }
+    out[outIdx] = sum;
+  }
 }
 
-__global__ void gpu_cutoff_binned_kernel(int *bin_ptrs,
-                                         float *in_val_sorted,
-                                         float *in_pos_sorted, float *out,
-                                         int grid_size, float cutoff2) {
+__global__ void gpu_cutoff_binned_kernel(int *bin_ptrs, float *in_val_sorted, float *in_pos_sorted, float *out, int grid_size,
+                                         float cutoff2) {
   //@@ INSERT CODE HERE
-
+  int outIdx = threadIdx.x + blockIdx.x * blockDim.x;
+  if (outIdx < grid_size) {
+    float sum = 0;
+    // find bins that overlap the cutoff region
+    int binIdx   = outIdx * NUM_BINS / grid_size;
+    int startBin = binIdx;
+    float cutoff = sqrtf(cutoff2);
+    while (startBin > 0) {
+      if ((float) outIdx - in_pos_sorted[bin_ptrs[startBin]] > cutoff) {
+        break;
+      }
+      --startBin;
+    }
+    int endBin = binIdx;
+    while (endBin < NUM_BINS) {
+      if (in_pos_sorted[bin_ptrs[endBin + 1] - 1] - (float) outIdx > cutoff) {
+        break;
+      }
+      ++endBin;
+    }
+    // sum over all bins
+    for (int bin = startBin; bin <= endBin; ++bin) {
+      for (int inIdx = bin_ptrs[bin]; inIdx < bin_ptrs[bin + 1]; ++inIdx) {
+        float dist  = in_pos_sorted[inIdx] - (float) outIdx;
+        float dist2 = dist * dist;
+        if (dist2 < cutoff2) {
+          sum += in_val_sorted[inIdx] * in_val_sorted[inIdx] / dist2;
+        }
+      }
+    }
+    out[outIdx] = sum;
+  }
 }
 
 /******************************************************************************
  Main computation functions
 *******************************************************************************/
 
-void cpu_normal(float *in_val, float *in_pos, float *out, int grid_size,
-                int num_in) {
+void cpu_normal(float *in_val, float *in_pos, float *out, int grid_size, int num_in) {
 
   for (int inIdx = 0; inIdx < num_in; ++inIdx) {
     const float in_val2 = in_val[inIdx] * in_val[inIdx];
     for (int outIdx = 0; outIdx < grid_size; ++outIdx) {
-      const float dist = in_pos[inIdx] - (float)outIdx;
+      const float dist = in_pos[inIdx] - (float) outIdx;
       out[outIdx] += in_val2 / (dist * dist);
     }
   }
 }
 
-void gpu_normal(float *in_val, float *in_pos, float *out, int grid_size,
-                int num_in) {
+void gpu_normal(float *in_val, float *in_pos, float *out, int grid_size, int num_in) {
 
   const int numThreadsPerBlock = 512;
-  const int numBlocks = (grid_size - 1) / numThreadsPerBlock + 1;
-  gpu_normal_kernel<<<numBlocks, numThreadsPerBlock>>>(in_val, in_pos, out,
-                                                       grid_size, num_in);
+  const int numBlocks          = (grid_size - 1) / numThreadsPerBlock + 1;
+  gpu_normal_kernel<<<numBlocks, numThreadsPerBlock>>>(in_val, in_pos, out, grid_size, num_in);
 }
 
-void gpu_cutoff(float *in_val, float *in_pos, float *out, int grid_size,
-                int num_in, float cutoff2) {
+void gpu_cutoff(float *in_val, float *in_pos, float *out, int grid_size, int num_in, float cutoff2) {
 
   const int numThreadsPerBlock = 512;
-  const int numBlocks = (grid_size - 1) / numThreadsPerBlock + 1;
-  gpu_cutoff_kernel<<<numBlocks, numThreadsPerBlock>>>(
-      in_val, in_pos, out, grid_size, num_in, cutoff2);
+  const int numBlocks          = (grid_size - 1) / numThreadsPerBlock + 1;
+  gpu_cutoff_kernel<<<numBlocks, numThreadsPerBlock>>>(in_val, in_pos, out, grid_size, num_in, cutoff2);
 }
 
-void gpu_cutoff_binned(int *bin_ptrs, float *in_val_sorted,
-                       float *in_pos_sorted, float *out, int grid_size,
-                       float cutoff2) {
+void gpu_cutoff_binned(int *bin_ptrs, float *in_val_sorted, float *in_pos_sorted, float *out, int grid_size, float cutoff2) {
 
   const int numThreadsPerBlock = 512;
-  const int numBlocks = (grid_size - 1) / numThreadsPerBlock + 1;
-  gpu_cutoff_binned_kernel<<<numBlocks, numThreadsPerBlock>>>(
-      bin_ptrs, in_val_sorted, in_pos_sorted, out, grid_size, cutoff2);
+  const int numBlocks          = (grid_size - 1) / numThreadsPerBlock + 1;
+  gpu_cutoff_binned_kernel<<<numBlocks, numThreadsPerBlock>>>(bin_ptrs, in_val_sorted, in_pos_sorted, out, grid_size, cutoff2);
 }
 
 /******************************************************************************
@@ -115,16 +153,16 @@ void gpu_cutoff_binned(int *bin_ptrs, float *in_val_sorted,
 //
 // parallelization scheme
 //
-// Again, for the preprocessing kernels, you are not writing (nor should 
-// you modify) the kernel launch code.  
+// Again, for the preprocessing kernels, you are not writing (nor should
+// you modify) the kernel launch code.
 //
-// histogram and sort use a fixed number of thread blocks of fixed size.  
+// histogram and sort use a fixed number of thread blocks of fixed size.
 // Use these threads to iterate through the entire data set and compute
-// the number of input elements in each bin for histogram, and to sort 
+// the number of input elements in each bin for histogram, and to sort
 // the input elements in sort.
 //
 // scan uses one block of NUM_BINS / 2 threads; implement an exclusive
-// scan using Brent-Kung, as described in 
+// scan using Brent-Kung, as described in
 // http://lumetta.web.engr.illinois.edu/408-S20/slide-copies/ece408-lecture16-S20.pdf
 // and be sure to fill in the last element of bin_pts (element NUM_BINS)
 // with the total sum of counts (should equal num_in, which may help in
@@ -133,14 +171,14 @@ void gpu_cutoff_binned(int *bin_ptrs, float *in_val_sorted,
 
 //
 // definition of inputs for preprocessing kernels
-// 
+//
 // grid_size -- size of coordinate space: [0, grid_size - 1) -- all input
 //              elements are within this interval
 // num_in    -- number of input elements
 // in_val    -- length num_in array of values of input elements
 // in_pos    -- length num_in array of values of input elements
 // bin_counts -- length NUM_BINS array of counts of input elements in bins
-//               (initialized to 0s, computed by histogram kernel, 
+//               (initialized to 0s, computed by histogram kernel,
 //               then provided to sort)
 // bin_ptrs   -- length (NUM_BINS + 1) array of indices into sorted
 //               input elements (produced by scan, provided to sort)
@@ -148,17 +186,16 @@ void gpu_cutoff_binned(int *bin_ptrs, float *in_val_sorted,
 // in_pos_sorted -- produced by sort by sorting from in_pos
 
 // constants that you will need for preprocessing
-// NUM_BINS  -- number of bins; these split the range [0,grid_size) 
+// NUM_BINS  -- number of bins; these split the range [0,grid_size)
 //              into NUM_BINS equally-sized bins; all input elements fall
 //              into the specified range, and thus map into some bin
-// 
-// N.B.  If you change the number of bins, some code may break.  In 
+//
+// N.B.  If you change the number of bins, some code may break.  In
 // particular, your scan algorithm will need to be much more flexible
 // to handle a larger data set--simply launching another thread block
 // is not sufficient.
 
-__global__ void histogram(float *in_pos, int *bin_counts, int num_in,
-                          int grid_size) {
+__global__ void histogram(float *in_pos, int *bin_counts, int num_in, int grid_size) {
 
   //@@ INSERT CODE HERE
 }
@@ -168,9 +205,8 @@ __global__ void scan(int *bin_counts, int *bin_ptrs) {
   //@@ INSERT CODE HERE
 }
 
-__global__ void sort(float *in_val, float *in_pos, float *in_val_sorted,
-                     float *in_pos_sorted, int grid_size, int num_in,
-                     int *bin_counts, int *bin_ptrs) {
+__global__ void sort(float *in_val, float *in_pos, float *in_val_sorted, float *in_pos_sorted, int grid_size, int num_in, int *bin_counts,
+                     int *bin_ptrs) {
 
   //@@ INSERT CODE HERE
 }
@@ -179,17 +215,15 @@ __global__ void sort(float *in_val, float *in_pos, float *in_val_sorted,
  Preprocessing functions
 *******************************************************************************/
 
-static void cpu_preprocess(float *in_val, float *in_pos,
-                           float *in_val_sorted, float *in_pos_sorted,
-                           int grid_size, int num_in, int *bin_counts,
-                           int *bin_ptrs) {
+static void cpu_preprocess(float *in_val, float *in_pos, float *in_val_sorted, float *in_pos_sorted, int grid_size, int num_in,
+                           int *bin_counts, int *bin_ptrs) {
 
   // Histogram the input positions
   for (int binIdx = 0; binIdx < NUM_BINS; ++binIdx) {
     bin_counts[binIdx] = 0;
   }
   for (int inIdx = 0; inIdx < num_in; ++inIdx) {
-    const int binIdx = (int)((in_pos[inIdx] / grid_size) * NUM_BINS);
+    const int binIdx = (int) ((in_pos[inIdx] / grid_size) * NUM_BINS);
     ++bin_counts[binIdx];
   }
 
@@ -201,7 +235,7 @@ static void cpu_preprocess(float *in_val, float *in_pos,
 
   // Sort the inputs into the bins
   for (int inIdx = 0; inIdx < num_in; ++inIdx) {
-    const int binIdx = (int)((in_pos[inIdx] / grid_size) * NUM_BINS);
+    const int binIdx = (int) ((in_pos[inIdx] / grid_size) * NUM_BINS);
     const int newIdx = bin_ptrs[binIdx + 1] - bin_counts[binIdx];
     --bin_counts[binIdx];
     in_val_sorted[newIdx] = in_val[inIdx];
@@ -209,16 +243,13 @@ static void cpu_preprocess(float *in_val, float *in_pos,
   }
 }
 
-static void gpu_preprocess(float *in_val, float *in_pos,
-                           float *in_val_sorted, float *in_pos_sorted,
-                           int grid_size, int num_in, int *bin_counts,
-                           int *bin_ptrs) {
+static void gpu_preprocess(float *in_val, float *in_pos, float *in_val_sorted, float *in_pos_sorted, int grid_size, int num_in,
+                           int *bin_counts, int *bin_ptrs) {
 
   const int numThreadsPerBlock = 512;
 
   // Histogram the input positions
-  histogram<<<30, numThreadsPerBlock>>>(in_pos, bin_counts, num_in,
-                                        grid_size);
+  histogram<<<30, numThreadsPerBlock>>>(in_pos, bin_counts, num_in, grid_size);
 
   // Scan the histogram to get the bin pointers
   if (NUM_BINS != 1024) {
@@ -228,11 +259,8 @@ static void gpu_preprocess(float *in_val, float *in_pos,
   scan<<<1, numThreadsPerBlock>>>(bin_counts, bin_ptrs);
 
   // Sort the inputs into the bins
-  sort<<<30, numThreadsPerBlock>>>(in_val, in_pos, in_val_sorted,
-                                   in_pos_sorted, grid_size, num_in,
-                                   bin_counts, bin_ptrs);
+  sort<<<30, numThreadsPerBlock>>>(in_val, in_pos, in_val_sorted, in_pos_sorted, grid_size, num_in, bin_counts, bin_ptrs);
 }
-
 
 template <Mode mode>
 int eval(const int num_in, const int max, const int grid_size) {

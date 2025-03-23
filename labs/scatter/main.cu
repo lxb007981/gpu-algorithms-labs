@@ -2,6 +2,14 @@
 
 __global__ void s2g_gpu_scatter_kernel(uint32_t *in, uint32_t *out, int len) {
   //@@ INSERT KERNEL CODE HERE
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < len) {
+    uint32_t intermediate = outInvariant(in[idx]);
+    for (int outIdx = 0; outIdx < len; ++outIdx) {
+      // atomic add
+      atomicAdd(&out[outIdx], outDependent(intermediate, idx, outIdx));
+    }
+  }
 }
 
 static void s2g_cpu_scatter(uint32_t *in, uint32_t *out, int len) {
@@ -16,6 +24,9 @@ static void s2g_cpu_scatter(uint32_t *in, uint32_t *out, int len) {
 
 static void s2g_gpu_scatter(uint32_t *in, uint32_t *out, int len) {
   //@@ INSERT CODE HERE
+  int blockSize = 256;
+  int numBlocks = (len + blockSize - 1) / blockSize;
+  s2g_gpu_scatter_kernel<<<numBlocks, blockSize>>>(in, out, len);
 }
 
 static int eval(int inputLength) {
